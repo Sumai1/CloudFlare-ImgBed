@@ -7,6 +7,7 @@
   <!-- Import CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/theme-chalk/index.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css">
+  <script src="https://js.sentry-cdn.com/219f636ac7bde5edab2c3e16885cb535.min.js" crossorigin="anonymous"></script>
   <style>
     body {
       background: linear-gradient(90deg, #ffd7e4 0%, #c8f1ff 100%);
@@ -140,18 +141,20 @@
 
     .content {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: repeat(3, 1fr);
       gap: 20px;
       padding: 10px;
       flex-grow: 1;
     }
 
     .el-card {
-      position: relative;
-      border-radius: 8px;
-      overflow: hidden;
+      width: 100%;
       background: rgba(255, 255, 255, 0.6);
+      border-radius: 8px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      position: relative;
       transition: transform 0.3s ease;
     }
 
@@ -163,6 +166,11 @@
       width: 100%;
       height: 200px;
       object-fit: cover;
+      transition: opacity 0.3s ease;
+    }
+
+    .el-image:hover {
+      opacity: 0.8;
     }
 
     .file-info {
@@ -175,6 +183,9 @@
       left: 0;
       width: 100%;
       box-sizing: border-box;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
     .image-overlay {
@@ -208,6 +219,88 @@
       margin-top: 20px;
       padding-bottom: 20px;
     }
+
+    .el-checkbox {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      transform: scale(1.5);
+      z-index: 10;
+    }
+
+    /* Media Queries for Mobile Adaptation */
+    @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 10px;
+      }
+
+      .title {
+        font-size: 1.5em;
+        margin-bottom: 10px;
+      }
+
+      .search-card {
+        width: 100%;
+        margin: 0;
+      }
+
+      .search-card .el-input__inner {
+        width: 100%;
+      }
+
+      .stats {
+        font-size: 1em;
+        margin-bottom: 10px;
+      }
+
+      .header-content .actions {
+        width: 100%;
+        justify-content: space-around;
+      }
+
+      .content {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: auto;
+        gap: 10px;
+        padding: 5px;
+      }
+
+      .el-card {
+        height: auto;
+      }
+
+      .el-image {
+        height: 150px;
+      }
+
+      .pagination-container {
+        padding-bottom: 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .content {
+        grid-template-columns: 1fr;
+      }
+
+      .header-content {
+        padding: 5px;
+      }
+
+      .title {
+        font-size: 1.2em;
+      }
+
+      .stats {
+        font-size: 0.9em;
+      }
+
+      .el-image {
+        height: 120px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -231,127 +324,199 @@
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="dateDesc" :class="{ 'el-dropdown-menu__item--selected': sortOption === 'dateDesc' }">按时间倒序</el-dropdown-item>
                   <el-dropdown-item command="nameAsc" :class="{ 'el-dropdown-menu__item--selected': sortOption === 'nameAsc' }">按名称升序</el-dropdown-item>
-                  <el-dropdown-item command="nameDesc" :class="{ 'el-dropdown-menu__item--selected': sortOption === 'nameDesc' }">按名称降序</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </el-tooltip>
-            <el-tooltip content="其他设置" placement="bottom">
-              <i class="fas fa-cog"></i>
+            <el-tooltip content="批量复制" placement="bottom">
+              <i class="fas fa-link" :class="{ disabled: selectedFiles.length === 0 }" @click="handleBatchCopy"></i>
             </el-tooltip>
-            <el-tooltip content="用户信息" placement="bottom">
-              <i class="fas fa-user"></i>
+            <el-tooltip content="批量删除" placement="bottom">
+              <i class="fas fa-trash-alt" :class="{ disabled: selectedFiles.length === 0 }" @click="handleBatchDelete"></i>
+            </el-tooltip>
+            <el-tooltip content="退出登录" placement="bottom">
+              <i class="fas fa-home" @click="handleLogout"></i>
             </el-tooltip>
           </div>
         </div>
       </el-header>
-      <el-main>
-        <div class="main-container">
-          <div class="content">
-            <el-card v-for="(item, index) in paginatedData" :key="index" class="el-card">
-              <img :src="item.imageUrl" class="el-image" alt="Image">
-              <div class="file-info">
-                <div>{{ item.name }}</div>
-                <div>{{ item.size }}</div>
-              </div>
+      <el-main class="main-container">
+        <div class="content">
+          <template v-for="(item, index) in paginatedTableData" :key="index">
+            <el-card>
+              <el-checkbox v-model="item.selected"></el-checkbox>
+              <el-image
+                :src="'/file/' + item.name"
+                :preview-src-list="['/file/' + item.name]"
+                fit="cover"
+                lazy></el-image>
               <div class="image-overlay">
                 <div class="overlay-buttons">
-                  <el-button @click="viewImage(item)">查看</el-button>
-                  <el-button @click="downloadImage(item)">下载</el-button>
+                  <el-button size="mini" type="primary" @click.stop="handleCopy(index, item.name)">复制地址</el-button>
+                  <el-button size="mini" type="danger" @click.stop="handleDelete(index, item.name)">删除</el-button>
                 </div>
               </div>
+              <div class="file-info">{{ item.name }}</div>
             </el-card>
-          </div>
-          <div class="pagination-container">
-            <el-pagination
-              @current-change="handlePageChange"
-              :current-page="currentPage"
-              :page-size="pageSize"
-              :total="total"
-              layout="prev, pager, next"
-            ></el-pagination>
-          </div>
+          </template>
+        </div>
+        <div class="pagination-container">
+          <el-pagination
+            background
+            layout="prev, pager, next"
+            :total="filteredTableData.length"
+            :page-size="pageSize"
+            @current-change="handlePageChange"
+            :current-page.sync="currentPage">
+          </el-pagination>
         </div>
       </el-main>
     </el-container>
   </div>
 
+  <!-- Import Vue before Element -->
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+  <!-- Import JavaScript -->
   <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js"></script>
   <script>
     new Vue({
       el: '#app',
-      data() {
-        return {
-          search: '',
-          currentPage: 1,
-          pageSize: 10,
-          total: 0,
-          Number: 0,
-          sortOption: 'dateDesc',
-          paginatedData: [],
-          data: [
-            { name: 'Image 1', size: '2MB', imageUrl: 'https://via.placeholder.com/300' },
-            { name: 'Image 2', size: '1.5MB', imageUrl: 'https://via.placeholder.com/300' },
-          ],
-        }
+      data: {
+        Number: 0,
+        showLogoutButton: false,
+        tableData: [],
+        search: '',
+        currentPage: 1,
+        pageSize: 15,
+        selectedFiles: [],
+        sortOption: 'dateDesc',
+        isUploading: false
       },
       computed: {
-        sortedData() {
-          return this.data.sort((a, b) => {
-            if (this.sortOption === 'dateDesc') {
-              return new Date(b.date) - new Date(a.date);
-            } else if (this.sortOption === 'nameAsc') {
-              return a.name.localeCompare(b.name);
-            } else if (this.sortOption === 'nameDesc') {
-              return b.name.localeCompare(a.name);
-            }
-          });
+        filteredTableData() {
+          return this.tableData.filter(data => !this.search || data.name.toLowerCase().includes(this.search.toLowerCase()));
         },
-        filteredData() {
-          return this.sortedData.filter(item => item.name.toLowerCase().includes(this.search.toLowerCase()));
-        },
-      },
-      methods: {
-        handlePageChange(page) {
-          this.currentPage = page;
-          this.updatePaginatedData();
-        },
-        updatePaginatedData() {
+        paginatedTableData() {
+          const sortedData = this.sortData(this.filteredTableData);
           const start = (this.currentPage - 1) * this.pageSize;
-          const end = this.currentPage * this.pageSize;
-          this.paginatedData = this.filteredData.slice(start, end);
-          this.total = this.filteredData.length;
+          const end = start + this.pageSize;
+          return sortedData.slice(start, end);
         },
-        sort(option) {
-          this.sortOption = option;
-          this.updatePaginatedData();
-        },
-        refreshDashboard() {
-          console.log('Dashboard refreshed');
-        },
-        viewImage(item) {
-          window.open(item.imageUrl, '_blank');
-        },
-        downloadImage(item) {
-          const link = document.createElement('a');
-          link.href = item.imageUrl;
-          link.download = item.name;
-          link.click();
-        },
+        sortIcon() {
+          return this.sortOption === 'dateDesc' ? 'fas fa-sort-amount-down' : 'fas fa-sort-alpha-up';
+        }
       },
       watch: {
-        search() {
-          this.updatePaginatedData();
+        tableData: {
+          handler(newData) {
+            this.selectedFiles = newData.filter(file => file.selected);
+          },
+          deep: true
         },
-        sortOption() {
-          this.updatePaginatedData();
+        sortOption(newOption) {
+          localStorage.setItem('sortOption', newOption);
+        }
+      },
+      methods: {
+        refreshDashboard() {
+          location.reload();
         },
-        currentPage() {
-          this.updatePaginatedData();
+        handleDelete(index, key) {
+          this.$confirm('此操作将永久删除该文件, 是否继续?', '提示', {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }).then(() => {
+            fetch(`./api/manage/delete/${key}`, { method: 'GET', credentials: 'include' })
+              .then(response => response.ok ? this.tableData.splice(index, 1) : Promise.reject())
+              .then(() => {
+                this.updateStats();
+                this.$message.success('删除成功!');
+              })
+              .catch(() => this.$message.error('删除失败，请检查网络连接'));
+          }).catch(() => this.$message.info('已取消删除'));
         },
+        handleBatchDelete() {
+          this.$confirm('此操作将永久删除选中的文件, 是否继续?', '提示', {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }).then(() => {
+            const promises = this.selectedFiles.map(file => fetch(`./api/manage/delete/${file.name}`, { method: 'GET', credentials: 'include' }));
+
+            Promise.all(promises)
+              .then(results => {
+                results.forEach((response, index) => {
+                  if (response.ok) {
+                    const fileIndex = this.tableData.findIndex(file => file.name === this.selectedFiles[index].name);
+                    if (fileIndex !== -1) {
+                      this.tableData.splice(fileIndex, 1);
+                    }
+                  }
+                });
+                this.selectedFiles = [];
+                this.updateStats();
+                this.$message.success('批量删除成功!');
+              })
+              .catch(() => this.$message.error('批量删除失败，请检查网络连接'));
+          }).catch(() => this.$message.info('已取消批量删除'));
+        },
+        handleBatchCopy() {
+          const links = this.selectedFiles.map(file => `${document.location.origin}/file/${file.name}`).join('\n');
+          navigator.clipboard ? navigator.clipboard.writeText(links).then(() => this.$message.success('批量复制链接成功~')) :
+            this.copyToClipboardFallback(links);
+        },
+        copyToClipboardFallback(text) {
+          const textarea = document.createElement('textarea');
+          document.body.appendChild(textarea);
+          textarea.style.position = 'fixed';
+          textarea.style.clip = 'rect(0 0 0 0)';
+          textarea.style.top = '10px';
+          textarea.value = text;
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          this.$message.success('批量复制链接成功~');
+        },
+        handleLogout() {
+          window.location.href = '/';
+        },
+        handleCopy(index, key) {
+          const text = `${document.location.origin}/file/${key}`;
+          navigator.clipboard ? navigator.clipboard.writeText(text).then(() => this.$message.success('复制文件链接成功~')) :
+            this.copyToClipboardFallback(text);
+        },
+        handlePageChange(page) {
+          this.currentPage = page;
+        },
+        updateStats() {
+          this.Number = this.tableData.length;
+        },
+        sort(command) {
+          this.sortOption = command;
+        },
+        sortData(data) {
+          return this.sortOption === 'nameAsc' ? data.sort((a, b) => a.name.localeCompare(b.name)) :
+            data.sort((a, b) => b.metadata.TimeStamp - a.metadata.TimeStamp);
+        }
       },
       mounted() {
-        this.updatePaginatedData();
+        fetch("./api/manage/check", { method: 'GET', credentials: 'include' })
+          .then(response => response.text())
+          .then(result => result === "true" ? this.showLogoutButton = true : window.location.href = "./api/manage/login")
+          .catch(() => this.$message.error('同步数据时出错，请检查网络连接'));
+
+        fetch("./api/manage/list", { method: 'GET', credentials: 'include' })
+          .then(response => response.json())
+          .then(result => {
+            this.tableData = result.map(file => ({ ...file, selected: false }));
+            this.updateStats();
+            const savedSortOption = localStorage.getItem('sortOption');
+            if (savedSortOption) {
+              this.sortOption = savedSortOption;
+            }
+            this.sortData(this.tableData);
+          })
+          .catch(() => this.$message.error('同步数据时出错，请检查网络连接'));
       }
     });
   </script>
